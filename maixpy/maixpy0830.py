@@ -24,7 +24,10 @@ sensor.run(1)
 # ————————————————————————————————————————————————
 dir2mag = [100, 75, 75, 83, 95, 110, 120, 120]
 mag = 0
-
+# ——————————————————————————————————————————————————
+# 速度初始化，范围[-200,200],speed[0]zuohou，speed[1]zuoqian，speed[2]youhou,speed[3]youqian，8位数据储存0~255
+# ————————————————————————————————————————————————————
+speed = [0, 150, 0, 150]
 
 # ————————————————————————————————————
 # 目标检测参数设置
@@ -76,58 +79,24 @@ echo = GPIO(GPIO.GPIO1, GPIO.IN)
 
 # ——————————————————————————————————————————————————————————————————————————————————————————————
 # 向Arduino发送速度数据,turn_info偏转量，范围为（-1,1），负为左转弯，正为右转弯，乘以100加到speed上
-# ————————————————————————————————————————————————————————————————————————————————————————
-# PID控制类
-# P主管响应，I减小静差，D抑制震荡。
-# p比例，p很小，柔软；p很大，生硬。
-# i积分，i很小，到不了目标值；i很大，超过目标值震荡。
-# d微分，d很小，围绕目标值震荡；d很大，很难达到目标值。
-rpm1,rpm0=0,0
-class PID():
-    def __init__(self,name):
-        # PID参数设置
-        self.kp, self.ki, self.kd = 0.6, 0.1, 0.05
-        self.errSum, self.lastErr = 0, 0
-        self.name=name
-    def run(self, Set_rpm, real_rpm):
-        error = Set_rpm - real_rpm
-        self.errSum += error
-        dErr = error - self.lastErr
-        pwm = int(self.kp * error + self.ki * self.errSum + self.kd * dErr)
-        self.lastErr = error
-        if (pwm > 255):
-            pwm = 255
-        if (pwm < -255):
-            pwm = -255
-        print('%s' %self.name,'速度设定值:%4s'%Set_rpm, '真实速度:%4s' % real_rpm, '电机占空比%4s' % pwm)
-        return pwm
-
-
-def speed(turn_info=0,v0=150, det_v=100):
-    global rpm0, rpm1
+# ——————————————————————————————————————————————————————————————————————————————————————————————
+def to_arduino(v0=150, det_v=100, turn_info=0):
+    global speed
     if (turn_info < 0):
-        zuopwm = zuopid.run(v0, rpm1)
-        youpwm = youpid.run(v0 - turn_info * det_v, rpm0)
+        speed[3] += int((-turn_info) * det_v)
     else:
-        zuopwm = zuopid.run(v0 + turn_info * det_v, rpm1)
-        youpwm = youpid.run(v0, rpm0)
-    to_arduino(zuopwm, youpwm)
+        speed[1] += int((turn_info) * det_v)
+    string = ''
+    for i in range(4):
+        if (speed[i] < 10):
+            string += '00'
+        elif (speed[i] < 100):
+            string += '0'
+        string += str(speed[i])
+    string += "00"
+    uart1.write(string)
+    speed = [0, v0, 0, v0]
 
-
-def to_arduino(zuopwm, youpwm):
-    data = ''
-    if (zuopwm < 0):
-        data += '%03d' % -zuopwm + "000"
-    else:
-        data += "000" + '%03d' % zuopwm
-    if (youpwm < 0):
-        data += '%03d' % -youpwm + "000"
-    else:
-        data += "000" + '%03d' % youpwm
-    data += "00"
-
-zuopid = PID("左轮")
-youpid = PID("右轮")
 
 def stop():
     uart1.write("00000000000000")
@@ -150,8 +119,7 @@ def from_arduino():
     if (read_data != None):
         data = str(read_data)[2:-1]
         data = data.split(',')
-        print('磁场度数:%3s' % data[0], '速度设定值:%3s' % data[1], '%3s' % data[2], '真实速度:%3s' % data[3], '%3s' % data[4],
-              '电机占空比%3s' % data[5], '%3s' % data[6])
+        print('磁场度数:%3s' % data[0], '速度设定值:%4s' % data[1], '%4s' % data[2], '真实速度:%4s' % data[3], '%4s' % data[4],'电机占空比%4s' % data[5], '%4s' % data[6])
 
 
 # ————————————————————————————
