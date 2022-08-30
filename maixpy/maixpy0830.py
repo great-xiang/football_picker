@@ -35,7 +35,7 @@ football = 1
 goal = 2
 anchors = [4.92, 3.31, 0.69, 2.53, 1.12, 0.97, 0.47, 0.53, 1.09, 3.36]
 task = None
-# task = kpu.load("/sd/model-10899.kmodel")
+# task = kpu.load("/sd/model-11247.kmodel")
 # kpu.init_yolo2(task, 0.5, 0.3, 5, anchors)
 obs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
@@ -437,3 +437,9 @@ def test_speed():
 # t = time.ticks_ms()
 # t = time.ticks_ms() - t
 # print(t)
+
+
+#显示堆内存
+#print(Maix.utils.heap_free() / 1024)
+#显示栈内存
+#print(gc.mem_free() / 1024)
