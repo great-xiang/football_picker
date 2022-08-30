@@ -24,10 +24,6 @@ sensor.run(1)
 # ————————————————————————————————————————————————
 dir2mag = [100, 75, 75, 83, 95, 110, 120, 120]
 mag = 0
-# ——————————————————————————————————————————————————
-# 速度初始化，范围[-200,200],speed[0]zuohou，speed[1]zuoqian，speed[2]youhou,speed[3]youqian，8位数据储存0~255
-# ————————————————————————————————————————————————————
-speed = [0, 150, 0, 150]
 
 # ————————————————————————————————————
 # 目标检测参数设置
@@ -76,26 +72,85 @@ fm.register(9, fm.fpioa.GPIO1)  # echo回响信号
 trig = GPIO(GPIO.GPIO0, GPIO.OUT)
 echo = GPIO(GPIO.GPIO1, GPIO.IN)
 
+#定时器回调函数
+def arduino(self):
+    global mag, rpm0, rpm1
+    read_data = uart1.read()
+    if (read_data != None):
+        try:
+            data = str(read_data)[2:-1]
+            data = data.split(',')
+            mag=int(data[0])
+            rpm0,rpm1=int(data[1]),int(data[2])
+            print('磁场度数:%3s' % data[0], '真实速度:%4s' % data[1], '%4s' % data[2], 'pwm%3s' % data[3], '%3s' % data[4],'%3s' % data[5],'%3s' % data[6])
+        except:
+            pass
+
+# 与arduino通信，100ms自动通信一次
+tim = Timer(Timer.TIMER0, Timer.CHANNEL0, mode=Timer.MODE_PERIODIC, period=100,callback=arduino)
+tim.start()
+
+
 
 # ——————————————————————————————————————————————————————————————————————————————————————————————
 # 向Arduino发送速度数据,turn_info偏转量，范围为（-1,1），负为左转弯，正为右转弯，乘以100加到speed上
-# ——————————————————————————————————————————————————————————————————————————————————————————————
-def to_arduino(v0=150, det_v=100, turn_info=0):
-    global speed
+# ————————————————————————————————————————————————————————————————————————————————————————
+# PID控制类
+# P主管响应，I减小静差，D抑制震荡。
+# p比例，p很小，柔软；p很大，生硬。
+# i积分，i很小，到不了目标值；i很大，超过目标值震荡。
+# d微分，d很小，围绕目标值震荡；d很大，很难达到目标值。
+rpm1, rpm0 = 0, 0
+
+
+class PID():
+    def __init__(self, name):
+        # PID参数设置
+        self.kp, self.ki, self.kd = 0.6, 0.1, 0.05
+        self.errSum, self.lastErr = 0, 0
+        self.name = name
+
+    def run(self, Set_rpm, real_rpm):
+        error = Set_rpm - real_rpm
+        self.errSum += error
+        dErr = error - self.lastErr
+        pwm = int(self.kp * error + self.ki * self.errSum + self.kd * dErr)
+        self.lastErr = error
+        if (pwm > 255):
+            pwm = 255
+        if (pwm < -255):
+            pwm = -255
+        print('%s' % self.name, '速度设定值:%4s' % Set_rpm, '真实速度:%4s' % real_rpm, '电机占空比%4s' % pwm)
+        return pwm
+
+
+def speed(turn_info=0, v0=100, det_v=100):
+    global rpm0, rpm1
     if (turn_info < 0):
-        speed[3] += int((-turn_info) * det_v)
+        zuopwm = zuopid.run(v0, rpm0)
+        youpwm = youpid.run(v0 - turn_info * det_v, rpm1)
     else:
-        speed[1] += int((turn_info) * det_v)
-    string = ''
-    for i in range(4):
-        if (speed[i] < 10):
-            string += '00'
-        elif (speed[i] < 100):
-            string += '0'
-        string += str(speed[i])
-    string += "00"
-    uart1.write(string)
-    speed = [0, v0, 0, v0]
+        zuopwm = zuopid.run(v0 + turn_info * det_v, rpm0)
+        youpwm = youpid.run(v0, rpm1)
+    to_arduino(zuopwm, youpwm)
+
+
+def to_arduino(zuopwm, youpwm):
+    data = ''
+    if (zuopwm < 0):
+        data += '%03d' % -zuopwm + "000"
+    else:
+        data += "000" + '%03d' % zuopwm
+    if (youpwm < 0):
+        data += '%03d' % -youpwm + "000"
+    else:
+        data += "000" + '%03d' % youpwm
+    data += "00"
+    uart1.write(data)
+
+
+zuopid = PID("左轮")
+youpid = PID("右轮")
 
 
 def stop():
@@ -108,18 +163,6 @@ def getball():
 
 def putball():
     uart1.write("00000000000001")
-
-
-# ————————————————————————
-# 从Arduino读取磁场角度数据，保存至全局变量mag
-# ————————————————————————
-def from_arduino():
-    global mag
-    read_data = uart1.read()
-    if (read_data != None):
-        data = str(read_data)[2:-1]
-        data = data.split(',')
-        print('磁场度数:%3s' % data[0], '速度设定值:%4s' % data[1], '%4s' % data[2], '真实速度:%4s' % data[3], '%4s' % data[4],'电机占空比%4s' % data[5], '%4s' % data[6])
 
 
 # ————————————————————————————
@@ -297,31 +340,15 @@ def bizhang(turn_info, speed, obs):
     return ang, spe
 
 
-while (1):
-    for i in range(10):
-        from_arduino()
-        utime.sleep_ms(100)
-        uart1.write("00010000000000")
 
-    for i in range(10):
-        from_arduino()
-        utime.sleep_ms(100)
-        uart1.write("00000000010000")
 
-    for i in range(10):
-        from_arduino()
-        utime.sleep_ms(100)
-        uart1.write("10000000000000")
 
-    for i in range(10):
-        from_arduino()
-        utime.sleep_ms(100)
-        uart1.write("00000010000000")
 
-    for i in range(10):
-        from_arduino()
-        utime.sleep_ms(100)
-        uart1.write("00000000000000")
+
+
+
+
+
 
 # ————————————————————————————————————————
 # 等待用户下达开始命令
@@ -332,9 +359,8 @@ direction = listen()
 # 调整初始方向
 # ————————————————————————————————————————
 
-send_arduino(turn_info=0)
+speed(0)
 while (1):
-    from_arduino()
     utime.sleep_ms(100)
     dif = direction - mag
     print("磁场差值:", dif)
@@ -342,9 +368,9 @@ while (1):
         stop()
         break
     elif (dif > 2):
-        send_arduino(turn_info=1)
+        speed(1)
     else:
-        send_arduino(turn_info=-1)
+        speed(-1)
 
 # ————————————————————————————————————————
 # 识别是否进入跑道
@@ -356,11 +382,10 @@ while (1):
 # ——————————————————————————————————————————
 while (1):
     turn_info = detect_line()
-    to_arduino(turn_info=rho_err)
     obs = yolo()
     angle, speed = bizhang(angle, speed, obs)
-    to_arduino()
-    utime.sleep_ms(220)
+    speed()
+    utime.sleep_ms(200)
 
 # ————————————————————————————————————————————
 # 抓球
@@ -388,16 +413,26 @@ putball()
 
 print("结束任务")
 
-# 标准控制速度方法
-# while(1):
-# maganet()
-# utime.sleep_ms(100)
-# send_arduino(1)
-# 等待
-# while(1):
-#     maganet()
-#     utime.sleep_ms(100)
-#     stop()
+#测试速度
+def test_speed():
+    while(1):
+        for i in range(30):
+            speed(-1)
+            utime.sleep_ms(100)
+
+        for i in range(30):
+            speed(1)
+            utime.sleep_ms(100)
+
+        for i in range(30):
+            speed(0)
+            utime.sleep_ms(100)
+        for i in range(30):
+            uart1.write("10000010000000")
+            utime.sleep_ms(100)
+        for i in range(30):
+            uart1.write("00000000000000")
+            utime.sleep_ms(100)
 # 测试帧率
 # t = time.ticks_ms()
 # t = time.ticks_ms() - t

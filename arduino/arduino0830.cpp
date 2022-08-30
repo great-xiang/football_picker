@@ -84,6 +84,12 @@ void loop()
     Serial.print(rpm0, DEC);
     Serial.print(",");
     Serial.print(rpm1, DEC);
+    Serial.print(",");
+    for (i = 0; i < 4; i++)
+    {
+        Serial.print(pwm[i]);
+        Serial.print(",");
+    }
     control();
 }
 
@@ -144,8 +150,8 @@ void control()
                     if (trig0 == 0)
                     {
                         break;
-                        delay(100);
                     }
+                    delay(10);
                 }
             }
             if (trig1)
@@ -156,13 +162,14 @@ void control()
                     if (trig1 == 0)
                     {
                         break;
-                        delay(100);
                     }
+                    delay(10);
                 }
             }
+            break;
         }
 
-        delay(30);
+        delay(10);
     }
 }
 
