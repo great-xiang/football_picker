@@ -1,8 +1,10 @@
 import image, utime, time, gc, sensor,Maix,sys,random
-import KPU as kpu
+
 from fpioa_manager import fm
 from Maix import GPIO, I2S
 from machine import Timer, UART
+from listen import listen
+from yolo import yolo
 # ————————————————————————————————————————-———————————————————————————————————————————————————
 # 全局变量
 # ———————————————————————————————————————————————————————————————————————————————————————————
@@ -35,27 +37,6 @@ sensor.set_vflip(False)  # 打开竖直反转模式
 sensor.skip_frames(time=2000)
 sensor.run(1)
 
-# ————————————————————————————————————————————————————————————————————————————————————————————————————
-# 目标检测参数设置
-# ——————————————————————————————————————————————————————————————————————————————————————————————————————
-
-labels = ['people', 'goal', 'football']
-people = 0
-football = 2
-goal = 1
-anchors = [0.44, 0.47, 5.34, 3.62, 2.28, 1.94, 0.75, 1.06, 0.81, 2.97]
-task = None
-## 显示堆内存
-#print(Maix.utils.heap_free() / 1024)
-## 显示栈内存
-#print(gc.mem_free() / 1024)
-task = kpu.load("/sd/model-11393.kmodel")
-kpu.init_yolo2(task, 0.5, 0.3, 5, anchors)
-## 显示堆内存
-#print(Maix.utils.heap_free() / 1024)
-## 显示栈内存
-#print(gc.mem_free() / 1024)
-obs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 # ——————————————————————————————————————————————————————————————————————————————————————————
 # 通信接口设置
@@ -64,10 +45,6 @@ obs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 fm.register(0, fm.fpioa.UART1_TX, force=True)
 fm.register(1, fm.fpioa.UART1_RX, force=True)
 uart1 = UART(UART.UART1, 115200, 8, None, 0, timeout=1000, read_buf_len=4096)
-# 语音识别uart
-fm.register(2, fm.fpioa.UART2_TX, force=True)
-fm.register(3, fm.fpioa.UART2_RX, force=True)
-uart2 = UART(UART.UART2, 9600, 8, 1, 0, timeout=1000, read_buf_len=4096)
 # 测距模块
 fm.register(8, fm.fpioa.GPIO0)  # trig触发信号
 fm.register(9, fm.fpioa.GPIO1)  # echo回响信号
@@ -224,18 +201,6 @@ def putball():
 timer = Timer(Timer.TIMER1, Timer.CHANNEL0, mode=Timer.MODE_PERIODIC, period=50, callback=timer_speed)
 
 
-# ————————————————————————————
-# 读取语音指令
-# ————————————————————————————
-def listen():
-    while (1):
-        data = uart2.read()
-        if (data != None):
-            data = str(data)[10:-6]
-            direction = dir2mag[int(data) - 1]
-            print("语音指令方向磁场角：", direction)
-            return direction
-        utime.sleep_ms(100)
 
 
 # ————————————————————————————————————
