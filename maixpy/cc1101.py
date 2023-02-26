@@ -3,7 +3,7 @@ from Maix import GPIO
 from machine import SPI
 from fpioa_manager import fm
 
-spi = SPI(0, mode=SPI.MODE_MASTER, baudrate=500000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=10, mosi=15,
+spi = SPI(1, mode=SPI.MODE_MASTER, baudrate=500000, polarity=0, phase=0, bits=8, firstbit=SPI.MSB, sck=10, mosi=15,
           miso=17, cs0=11)
 
 CC1101_IOCFG2 = 0x00  # GDO2 output pin configuration
